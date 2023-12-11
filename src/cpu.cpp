@@ -98,7 +98,8 @@ void Cpu::clock() {
 			uint8_t rd = byte >> 11 & 0b11111;
 			uint8_t l_sa = byte >> 6 & 0b11111;
 
-			write_reg_low(rd, static_cast<int64_t>(regs[rt].low << l_sa));
+			auto res = static_cast<int32_t>(regs[rt].low) << l_sa;
+			write_reg_low(rd, static_cast<int64_t>(res));
 		}
 		// SRA
 		else if (func == 0b000011) {
@@ -106,7 +107,8 @@ void Cpu::clock() {
 			uint8_t rd = byte >> 11 & 0b11111;
 			uint8_t l_sa = byte >> 6 & 0b11111;
 
-			write_reg_low(rd, static_cast<int64_t>(regs[rt].low >> l_sa));
+			auto res = static_cast<int32_t>(regs[rt].low) >> l_sa;
+			write_reg_low(rd, static_cast<int64_t>(res));
 		}
 		// JR
 		else if (func == 0b001000) {
@@ -138,7 +140,8 @@ void Cpu::clock() {
 			uint8_t rs = byte >> 21 & 0b11111;
 			uint8_t rt = byte >> 16 & 0b11111;
 			uint8_t rd = byte >> 11 & 0b11111;
-			write_reg_low(rd, regs[rs].low + regs[rt].low);
+			auto res = static_cast<int32_t>(regs[rs].low + regs[rt].low);
+			write_reg_low(rd, static_cast<int64_t>(res));
 		}
 		// AND
 		else if (func == 0b100100) {
@@ -202,7 +205,7 @@ void Cpu::clock() {
 
 		uint8_t rs = byte >> 21 & 0b11111;
 		uint8_t rt = byte >> 16 & 0b11111;
-		auto imm = static_cast<int32_t>((byte & 0xFFFF) << 2);
+		auto imm = static_cast<int32_t>(static_cast<int16_t>((byte & 0xFFFF))) << 2;
 		if (regs[rs].low != regs[rt].low) {
 			in_branch_delay = true;
 			new_pc = pc + imm;
@@ -215,7 +218,7 @@ void Cpu::clock() {
 
 		uint32_t instr_index = byte << 6 >> 6;
 		uint32_t addr = pc;
-		addr &= ~0b1111111111111111111111111111;
+		addr &= 0xF0000000;
 		addr |= instr_index << 2;
 		get_reg(Reg::Ra).low = pc + 4;
 
@@ -229,7 +232,7 @@ void Cpu::clock() {
 
 		uint8_t rs = byte >> 21 & 0b11111;
 		uint8_t rt = byte >> 16 & 0b11111;
-		auto imm = static_cast<int32_t>((byte & 0xFFFF) << 2);
+		auto imm = static_cast<int32_t>(static_cast<int16_t>((byte & 0xFFFF))) << 2;
 		if (regs[rs].low == regs[rt].low) {
 			in_branch_delay = true;
 			new_pc = pc + imm;
@@ -240,7 +243,7 @@ void Cpu::clock() {
 	else if (op == 0b001111) {
 		uint8_t rt = byte >> 16 & 0b11111;
 		uint32_t imm = (byte & 0xFFFF) << 16;
-		write_reg_low(rt, static_cast<int64_t>(imm));
+		write_reg_low(rt, static_cast<int64_t>(static_cast<int32_t>(imm)));
 	}
 	// ORI
 	else if (op == 0b001101) {
@@ -254,7 +257,8 @@ void Cpu::clock() {
 		uint8_t rs = byte >> 21 & 0b11111;
 		uint8_t rt = byte >> 16 & 0b11111;
 		auto imm = static_cast<int16_t>(byte & 0xFFFF);
-		write_reg_low(rt, regs[rs].low + imm);
+		auto res = static_cast<int32_t>(regs[rs].low) + imm;
+		write_reg_low(rt, static_cast<int64_t>(res));
 	}
 	// LW
 	else if (op == 0b100011) {
@@ -262,14 +266,14 @@ void Cpu::clock() {
 		uint8_t rt = byte >> 16 & 0b11111;
 		auto offset = static_cast<int16_t>(byte & 0xFFFF);
 		uint32_t addr = regs[base].low + offset;
-		write_reg_low(rt, static_cast<int64_t>(read32(addr)));
+		write_reg_low(rt, static_cast<int64_t>(static_cast<int32_t>(read32(addr))));
 	}
 	// ADDI
 	else if (op == 0b001000) {
 		uint8_t rs = byte >> 21 & 0b11111;
 		uint8_t rt = byte >> 16 & 0b11111;
 		auto imm = static_cast<int16_t>(byte & 0xFFFF);
-		write_reg_low(rt, regs[rs].low + imm);
+		write_reg_low(rt, static_cast<int64_t>(static_cast<int32_t>(regs[rs].low + imm)));
 	}
 	// ANDI
 	else if (op == 0b001100) {
@@ -373,7 +377,7 @@ void Cpu::clock() {
 		// BGEZ
 		if (func == 0b00001) {
 			uint8_t rs = byte >> 21 & 0b11111;
-			auto imm = static_cast<int32_t>((byte & 0xFFFF) << 2);
+			auto imm = static_cast<int32_t>(static_cast<int16_t>((byte & 0xFFFF))) << 2;
 			if (static_cast<int64_t>(regs[rs].low) >= 0) {
 				in_branch_delay = true;
 				new_pc = pc + imm;
