@@ -19,6 +19,15 @@ Cpu::Cpu(Bus& bus) : bus {bus} {
 }
 
 void Cpu::clock() {
+	// bus is clocked twice as slow as the cpu
+	if (clock_bus) {
+		bus.clock();
+		clock_bus = false;
+	}
+	else {
+		clock_bus = true;
+	}
+
 	auto byte = read32(pc);
 	pc += 4;
 
@@ -184,6 +193,13 @@ void Cpu::clock() {
 			uint8_t rd = byte >> 11 & 0b11111;
 			uint8_t l_sa = byte >> 6 & 0b11111;
 			write_reg_low(rd, regs[rt].low << (l_sa + 32));
+		}
+		// DSRA32
+		else if (func == 0b111111) {
+			uint8_t rt = byte >> 16 & 0b11111;
+			uint8_t rd = byte >> 11 & 0b11111;
+			uint8_t l_sa = byte >> 6 & 0b11111;
+			write_reg_low(rd, static_cast<int64_t>(regs[rt].low) >> (l_sa + 32));
 		}
 		else {
 			std::cerr << "unimplemented special func "
@@ -413,37 +429,97 @@ void Cpu::clock() {
 	// (0x14200005).toString(2).padStart(32, '0')
 }
 
-uint8_t Cpu::read8(uint32_t addr) {
-	return bus.read8(addr);
+uint32_t Cpu::virt_to_phys(uint32_t virt) {
+	return virt & 0x1FFFFFFF;
 }
 
-void Cpu::write8(uint32_t addr, uint8_t value) {
-	bus.write8(addr, value);
+uint8_t Cpu::read8(uint32_t addr) {
+	if (addr >= 0x70000000 && addr < 0x70004000) {
+		return scratchpad_ram[addr - 0x70000000];
+	}
+	else {
+		return bus.read8(virt_to_phys(addr));
+	}
 }
 
 uint16_t Cpu::read16(uint32_t addr) {
-	return read8(addr) | read8(addr + 1) << 8;
+	if (addr >= 0x70000000 && addr < 0x70004000) {
+		return scratchpad_ram[addr - 0x70000000] | scratchpad_ram[addr - 0x70000000] << 8;
+	}
+	else {
+		return bus.read16(virt_to_phys(addr));
+	}
 }
 
 uint32_t Cpu::read32(uint32_t addr) {
-	return read16(addr) | read16(addr + 2) << 16;
+	if (addr >= 0x70000000 && addr < 0x70004000) {
+		return scratchpad_ram[addr - 0x70000000] | scratchpad_ram[addr - 0x70000000 + 1] << 8 |
+			scratchpad_ram[addr - 0x70000000 + 2] << 16 | scratchpad_ram[addr - 0x70000000 + 3] << 24;
+	}
+	else {
+		return bus.read32(virt_to_phys(addr));
+	}
 }
 
 uint64_t Cpu::read64(uint32_t addr) {
-	return read32(addr) | static_cast<uint64_t>(read32(addr + 4)) << 32;
+	if (addr >= 0x70000000 && addr < 0x70004000) {
+		return scratchpad_ram[addr - 0x70000000] |
+			scratchpad_ram[addr - 0x70000000 + 1] << 8 |
+			scratchpad_ram[addr - 0x70000000 + 2] << 16 |
+			scratchpad_ram[addr - 0x70000000 + 3] << 24 |
+			static_cast<uint64_t>(scratchpad_ram[addr - 0x70000000 + 4]) << 32 |
+			static_cast<uint64_t>(scratchpad_ram[addr - 0x70000000 + 5]) << 40 |
+			static_cast<uint64_t>(scratchpad_ram[addr - 0x70000000 + 6]) << 48 |
+			static_cast<uint64_t>(scratchpad_ram[addr - 0x70000000 + 7]) << 56;
+	}
+	else {
+		return bus.read64(virt_to_phys(addr));
+	}
+}
+
+void Cpu::write8(uint32_t addr, uint8_t value) {
+	if (addr >= 0x70000000 && addr < 0x70004000) {
+		scratchpad_ram[addr - 0x70000000] = value;
+	}
+	else {
+		bus.write8(virt_to_phys(addr), value);
+	}
 }
 
 void Cpu::write16(uint32_t addr, uint16_t value) {
-	write8(addr, value);
-	write8(addr + 1, value >> 8);
+	if (addr >= 0x70000000 && addr < 0x70004000) {
+		scratchpad_ram[addr - 0x70000000] = value;
+		scratchpad_ram[addr - 0x70000000 + 1] = value >> 8;
+	}
+	else {
+		bus.write16(virt_to_phys(addr), value);
+	}
 }
 
 void Cpu::write32(uint32_t addr, uint32_t value) {
-	write16(addr, value);
-	write16(addr + 2, value >> 16);
+	if (addr >= 0x70000000 && addr < 0x70004000) {
+		scratchpad_ram[addr - 0x70000000] = value;
+		scratchpad_ram[addr - 0x70000000 + 1] = value >> 8;
+		scratchpad_ram[addr - 0x70000000 + 2] = value >> 16;
+		scratchpad_ram[addr - 0x70000000 + 3] = value >> 24;
+	}
+	else {
+		bus.write32(virt_to_phys(addr), value);
+	}
 }
 
 void Cpu::write64(uint32_t addr, uint64_t value) {
-	write32(addr, value);
-	write32(addr + 4, value >> 32);
+	if (addr >= 0x70000000 && addr < 0x70004000) {
+		scratchpad_ram[addr - 0x70000000] = value;
+		scratchpad_ram[addr - 0x70000000 + 1] = value >> 8;
+		scratchpad_ram[addr - 0x70000000 + 2] = value >> 16;
+		scratchpad_ram[addr - 0x70000000 + 3] = value >> 24;
+		scratchpad_ram[addr - 0x70000000 + 4] = value >> 32;
+		scratchpad_ram[addr - 0x70000000 + 5] = value >> 40;
+		scratchpad_ram[addr - 0x70000000 + 6] = value >> 48;
+		scratchpad_ram[addr - 0x70000000 + 7] = value >> 56;
+	}
+	else {
+		bus.write64(virt_to_phys(addr), value);
+	}
 }

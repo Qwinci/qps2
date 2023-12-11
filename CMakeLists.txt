@@ -9,5 +9,6 @@ add_executable(qps2
 	src/main.cpp
 	src/bus.cpp
 	src/cpu.cpp
+	src/timer.cpp
 )
 target_link_libraries(qps2 PRIVATE SDL2::SDL2)

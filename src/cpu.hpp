@@ -85,6 +85,7 @@ enum class Cop0Reg {
 struct Cpu {
 	explicit Cpu(Bus& bus);
 	Bus& bus;
+	bool clock_bus {true};
 
 	void clock();
 	inline constexpr Register& get_reg(Reg reg) {
@@ -130,8 +131,11 @@ struct Cpu {
 	TlbEntry tlb[48] {};
 
 	Coprocessor co0 {};
+	uint8_t scratchpad_ram[1024 * 16] {};
 	bool in_branch_delay {};
 	uint32_t new_pc {};
+
+	uint32_t virt_to_phys(uint32_t virt);
 
 	uint8_t read8(uint32_t addr);
 	uint16_t read16(uint32_t addr);

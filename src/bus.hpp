@@ -1,5 +1,6 @@
 #pragma once
 #include "cpu.hpp"
+#include "timer.hpp"
 #include <cstdint>
 #include <vector>
 #include <string>
@@ -15,8 +16,10 @@ struct Bus {
 	void write32(uint32_t addr, uint32_t value);
 	void write64(uint32_t addr, uint64_t value);
 
+	void clock();
+
 	Cpu cpu {*this};
 	std::vector<uint8_t> bios;
 	std::vector<uint8_t> main_ram;
-	uint8_t scratchpad_ram[1024 * 16] {};
+	Timer timers[4] {{*this}, {*this}, {*this}, {*this}};
 };
