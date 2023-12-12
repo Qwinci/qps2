@@ -107,7 +107,7 @@ void EeCpu::inst_special(uint32_t byte) {
 	}
 	// SYNC
 	else if (func == 0b001111) {
-	// todo implement
+		// todo implement
 	}
 	// MFHI
 	else if (func == 0b010000) {
@@ -139,10 +139,13 @@ void EeCpu::inst_special(uint32_t byte) {
 	else if (func == 0b011000) {
 		uint8_t rs = byte >> 21 & 0b11111;
 		uint8_t rt = byte >> 16 & 0b11111;
+		uint8_t rd = byte >> 11 & 0b11111;
 		auto a = static_cast<int32_t>(regs[rs].low);
 		auto b = static_cast<int32_t>(regs[rt].low);
 		int64_t res = a * b;
 		hi_lo = res;
+		auto low = static_cast<int32_t>(res);
+		write_reg_low(rd, static_cast<int64_t>(low));
 	}
 	// DIV
 	else if (func == 0b011010) {

@@ -13,10 +13,13 @@ void EeCpu::inst_mmi(uint32_t byte) {
 	else if (func == 0b011000) {
 		uint8_t rs = byte >> 21 & 0b11111;
 		uint8_t rt = byte >> 16 & 0b11111;
+		uint8_t rd = byte >> 11 & 0b11111;
 		auto a = static_cast<int32_t>(regs[rs].low);
 		auto b = static_cast<int32_t>(regs[rt].low);
 		int64_t res = a * b;
 		hi1_lo1 = res;
+		auto low = static_cast<int32_t>(res);
+		write_reg_low(rd, static_cast<int64_t>(low));
 	}
 	// DIV1
 	else if (func == 0b011010) {

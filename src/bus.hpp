@@ -1,5 +1,6 @@
 #pragma once
 #include "ee/cpu.hpp"
+#include "iop/cpu.hpp"
 #include "timer.hpp"
 #include "gif.hpp"
 #include "gs.hpp"
@@ -25,6 +26,7 @@ struct Bus {
 	void clock();
 
 	EeCpu ee_cpu {*this};
+	IopCpu iop_cpu {*this};
 	std::vector<uint8_t> bios;
 	std::vector<uint8_t> main_ram;
 	std::vector<uint8_t> iop_ram;

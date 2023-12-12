@@ -195,11 +195,17 @@ void EeCpu::inst_normal(uint32_t byte) {
 		uint8_t rt = byte >> 16 & 0b11111;
 		auto offset = static_cast<int16_t>(byte & 0xFFFF);
 		uint32_t addr = regs[base].low + offset;
-		uint64_t res = regs[rt].low;
-		res &= 0xFFFFFFFF;
-		res |= static_cast<uint64_t>(read32(addr)) << 32;
-		write_reg_high(rt, res);
-		// todo verify
+		uint32_t aligned_addr = addr & ~0b111;
+		uint64_t value = read64(aligned_addr);
+
+		auto align = addr & 7;
+
+		uint64_t mask = 0x00FFFFFFFFFFFFFF;
+		uint8_t shift = align * 8;
+		mask >>= shift;
+		uint8_t value_shift = 56 - shift;
+		uint64_t res = value << value_shift | (regs[rt].low & mask);
+		write_reg_low(rt, res);
 	}
 	// LDR
 	else if (op == 0b011011) {
@@ -207,11 +213,16 @@ void EeCpu::inst_normal(uint32_t byte) {
 		uint8_t rt = byte >> 16 & 0b11111;
 		auto offset = static_cast<int16_t>(byte & 0xFFFF);
 		uint32_t addr = regs[base].low + offset;
-		uint64_t res = regs[rt].low;
-		res &= 0xFFFFFFFF00000000;
-		res |= static_cast<uint64_t>(read32(addr));
-		write_reg_high(rt, res);
-		// todo verify
+		uint32_t aligned_addr = addr & ~0b111;
+		uint64_t value = read64(aligned_addr);
+
+		auto align = addr & 7;
+
+		uint64_t mask = 0xFFFFFFFFFFFFFF00;
+		uint8_t shift = align * 8;
+		mask <<= (56 - shift);
+		uint64_t res = value >> shift | (regs[rt].low & mask);
+		write_reg_low(rt, res);
 	}
 	// MMI
 	else if (op == 0b011100) {
@@ -315,7 +326,18 @@ void EeCpu::inst_normal(uint32_t byte) {
 		uint8_t rt = byte >> 16 & 0b11111;
 		auto offset = static_cast<int16_t>(byte & 0xFFFF);
 		uint32_t addr = regs[base].low + offset;
-		write32(addr, regs[rt].low >> 32);
+		uint32_t aligned_addr = addr & ~0b111;
+		uint64_t value = regs[rt].low;
+
+		auto align = addr & 7;
+
+		uint64_t mask = 0x00FFFFFFFFFFFFFF;
+		uint8_t shift = align * 8;
+		mask >>= shift;
+		uint8_t value_shift = 56 - shift;
+		uint64_t res = value << value_shift | (read64(aligned_addr) & mask);
+
+		write64(aligned_addr, res);
 	}
 	// SDR
 	else if (op == 0b101101) {
@@ -323,7 +345,16 @@ void EeCpu::inst_normal(uint32_t byte) {
 		uint8_t rt = byte >> 16 & 0b11111;
 		auto offset = static_cast<int16_t>(byte & 0xFFFF);
 		uint32_t addr = regs[base].low + offset;
-		write32(addr, regs[rt].low);
+		uint32_t aligned_addr = addr & ~0b111;
+		uint64_t value = regs[rt].low;
+
+		auto align = addr & 7;
+
+		uint64_t mask = 0xFFFFFFFFFFFFFF00;
+		uint8_t shift = align * 8;
+		mask <<= (56 - shift);
+		uint64_t res = value >> shift | (read64(aligned_addr) & mask);
+		write64(aligned_addr, res);
 	}
 	// CACHE
 	else if (op == 0b101111) {
