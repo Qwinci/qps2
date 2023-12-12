@@ -1,6 +1,12 @@
 #pragma once
-#include "cpu.hpp"
+#include "ee/cpu.hpp"
 #include "timer.hpp"
+#include "gif.hpp"
+#include "gs.hpp"
+#include "dmac.hpp"
+#include "vif.hpp"
+#include "ipu.hpp"
+#include "sif.hpp"
 #include <cstdint>
 #include <vector>
 #include <string>
@@ -18,8 +24,23 @@ struct Bus {
 
 	void clock();
 
-	Cpu cpu {*this};
+	EeCpu ee_cpu {*this};
 	std::vector<uint8_t> bios;
 	std::vector<uint8_t> main_ram;
+	std::vector<uint8_t> iop_ram;
+	std::vector<uint8_t> vu0_code;
+	std::vector<uint8_t> vu0_data;
+	std::vector<uint8_t> vu1_code;
+	std::vector<uint8_t> vu1_data;
 	Timer timers[4] {{*this}, {*this}, {*this}, {*this}};
+	Gif gif {*this};
+	Gs gs {*this};
+	Dmac dmac {*this};
+	Vif vif0 {*this};
+	Vif vif1 {*this};
+	Ipu ipu {*this};
+	Sif sif {*this};
+	uint32_t mch_ricm {};
+	uint32_t mch_drd {};
+	uint8_t rdram_dev_id {};
 };

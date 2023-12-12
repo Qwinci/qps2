@@ -82,8 +82,8 @@ enum class Cop0Reg {
 	ErrorEpc
 };
 
-struct Cpu {
-	explicit Cpu(Bus& bus);
+struct EeCpu {
+	explicit EeCpu(Bus& bus);
 	Bus& bus;
 	bool clock_bus {true};
 
@@ -97,6 +97,13 @@ struct Cpu {
 			return;
 		}
 		regs[reg].low = value;
+	}
+
+	inline void write_reg_high(uint8_t reg, uint64_t value) {
+		if (reg == 0) {
+			return;
+		}
+		regs[reg].high = value;
 	}
 
 	Register regs[32] {};
@@ -134,6 +141,8 @@ struct Cpu {
 	uint8_t scratchpad_ram[1024 * 16] {};
 	bool in_branch_delay {};
 	uint32_t new_pc {};
+	uint32_t intc_stat {};
+	uint32_t intc_mask {};
 
 	uint32_t virt_to_phys(uint32_t virt);
 
@@ -145,4 +154,14 @@ struct Cpu {
 	void write16(uint32_t addr, uint16_t value);
 	void write32(uint32_t addr, uint32_t value);
 	void write64(uint32_t addr, uint64_t value);
+
+	void raise_level2_exception(uint32_t vector, uint8_t cause);
+
+	void inst_cop0(uint32_t byte);
+	void inst_special(uint32_t byte);
+	void inst_normal(uint32_t byte);
+	void inst_regimm(uint32_t byte);
+	void inst_mmi(uint32_t byte);
+	void inst_cop2(uint32_t byte);
+	void inst_cop1(uint32_t byte);
 };

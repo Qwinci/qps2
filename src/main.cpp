@@ -3,6 +3,6 @@
 int main() {
 	Bus bus {"../roms/bios.bin"};
 	while (true) {
-		bus.cpu.clock();
+		bus.ee_cpu.clock();
 	}
 }
