@@ -280,10 +280,11 @@ void Gs::write_reg(uint8_t reg, uint64_t data) {
 }
 
 void Gs::draw_pixel(uint16_t x, uint16_t y, uint32_t z, uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
-	x = std::min<uint16_t>(x, SCREEN_WIDTH - 1);
-	y = std::min<uint16_t>(y, SCREEN_HEIGHT - 1);
-
 	const auto& ctx = contexts[(prim & 1 << 9) ? 1 : 0];
+	if (x < ctx.scissor.x0 || x > ctx.scissor.x1 ||
+		y < ctx.scissor.y0 || y > ctx.scissor.y1) {
+		return;
+	}
 
 	assert(ctx.frame.fmt == 0);
 	auto fb_base_ptr = ctx.frame.base_ptr * 4 * 2048;
@@ -293,10 +294,6 @@ void Gs::draw_pixel(uint16_t x, uint16_t y, uint32_t z, uint8_t r, uint8_t g, ui
 	uint32_t z_value;
 	if (ctx.z_buf.fmt == 0) {
 		z_value = *(uint32_t*) &vram[z_buf_base_ptr + y * fb_width * 4 + x * 4];
-	}
-	else if (ctx.z_buf.fmt == 1) {
-		z_value = *(uint32_t*) &vram[z_buf_base_ptr + y * fb_width * 4 + x * 4];
-		z_value &= 0xFFFFFF;
 	}
 	else {
 		assert(false);
@@ -316,15 +313,9 @@ void Gs::draw_pixel(uint16_t x, uint16_t y, uint32_t z, uint8_t r, uint8_t g, ui
 		*(uint32_t*) &vram[z_buf_base_ptr + y * fb_width * 4 + x * 4] = z;
 	}
 
-	uint32_t rgba = *(uint32_t*) &vram[fb_base_ptr + y * fb_width * 4 + x * 4];
-	uint32_t fb_value = rgba | a << 24 | b << 16 | g << 8 | r;
-	uint32_t value = (fb_value & 0xFF) << 24 |
-		(fb_value >> 8 & 0xFF) << 16 |
-		(fb_value >> 16 & 0xFF) << 8 |
-		(fb_value >> 24);
-
-	*(uint32_t*) &vram[fb_base_ptr + y * fb_width * 4 + x * 4] = fb_value;
-	target[y * SCREEN_WIDTH + x] = value;
+	auto* ptr = (uint32_t*) &vram[fb_base_ptr + y * fb_width * 4 + x * 4];
+	uint32_t value = a << 24 | b << 16 | g << 8 | r;
+	*ptr = value;
 }
 
 void Gs::draw_sprite() {
@@ -348,7 +339,13 @@ void Gs::draw_sprite() {
 }
 
 static bool edge_function(const Gs::Vertex& a, const Gs::Vertex& b, uint32_t point_x, uint32_t point_y) {
-	return (point_x - a.x) * (b.y - a.y) - (point_y - a.y) * (b.x - a.x) >= 0;
+	auto p_x = static_cast<int16_t>(point_x);
+	auto p_y = static_cast<int16_t>(point_y);
+	auto a_x = static_cast<int16_t>(a.x);
+	auto b_x = static_cast<int16_t>(b.x);
+	auto a_y = static_cast<int16_t>(a.y);
+	auto b_y = static_cast<int16_t>(b.y);
+	return (p_x - a_x) * (b_y - a_y) - (p_y - a_y) * (b_x - a_x) >= 0;
 }
 
 void Gs::draw_triangle() {
@@ -387,8 +384,27 @@ void Gs::draw_triangle() {
 			inside_tri &= edge_function(second, third, x, y);
 			inside_tri &= edge_function(third, first, x, y);
 
+			auto get_distance = [](Vertex& vert, uint16_t x, uint16_t y) {
+				auto x_dist = static_cast<uint16_t>(std::abs(static_cast<int32_t>(vert.x) - static_cast<int32_t>(x)));
+				auto y_dist = static_cast<uint16_t>(std::abs(static_cast<int32_t>(vert.y) - static_cast<int32_t>(y)));
+				return static_cast<uint32_t>(x_dist + y_dist);
+			};
+
 			if (inside_tri) {
-				draw_pixel(x, y, first.z, first.r, first.g, first.b, first.a);
+				auto first_dist = get_distance(first, x, y);
+				auto second_dist = get_distance(second, x, y);
+				auto third_dist = get_distance(third, x, y);
+				Vertex* vert;
+				if (first_dist < second_dist && first_dist < third_dist) {
+					vert = &first;
+				}
+				else if (second_dist < first_dist && second_dist < third_dist) {
+					vert = &second;
+				}
+				else {
+					vert = &third;
+				}
+				draw_pixel(x, y, vert->z, vert->r, vert->g, vert->b, vert->a);
 			}
 		}
 	}
@@ -410,7 +426,7 @@ void Gs::write_hw_reg(uint64_t data) {
 		auto width = transfer.transfer_area_width;
 		auto height = transfer.transfer_area_height;
 
-		uint8_t* dest_ptr = vram.data();
+		uint8_t* dest_ptr = vram.data() + dest_base_ptr;
 		dest_ptr += transfer.cur_dest_y * dest_buf_width_px * 4;
 		dest_ptr += transfer.cur_dest_x * 4;
 		auto* ptr = reinterpret_cast<uint32_t*>(dest_ptr);
