@@ -121,7 +121,9 @@ struct EeCpu {
 	void write32(uint32_t addr, uint32_t value);
 	void write64(uint32_t addr, uint64_t value);
 
+	void raise_level1_exception(uint32_t vector, uint8_t cause);
 	void raise_level2_exception(uint32_t vector, uint8_t cause);
+	void raise_int0(uint8_t irq);
 
 	void inst_cop0(uint32_t byte);
 	void inst_special(uint32_t byte);
@@ -131,3 +133,7 @@ struct EeCpu {
 	void inst_cop2(uint32_t byte);
 	void inst_cop1(uint32_t byte);
 };
+
+#define EE_HZ 295000000ULL
+#define EE_CYCLES_IN_NTSC_VBLANK 4921588
+#define EE_CYCLES_IN_NTSC_HBLANK 18749

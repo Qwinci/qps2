@@ -13,7 +13,7 @@
 #include <string>
 
 struct Bus {
-	explicit Bus(const std::string& bios_name);
+	Bus(const std::string& bios_name, uint32_t* tex_target);
 	uint8_t read8(uint32_t addr);
 	uint16_t read16(uint32_t addr);
 	uint32_t read32(uint32_t addr);
@@ -36,7 +36,7 @@ struct Bus {
 	std::vector<uint8_t> vu1_data;
 	Timer timers[4] {{*this}, {*this}, {*this}, {*this}};
 	Gif gif {*this};
-	Gs gs {*this};
+	Gs gs;
 	Dmac dmac {*this};
 	Vif vif0 {*this};
 	Vif vif1 {*this};

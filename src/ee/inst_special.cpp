@@ -101,6 +101,10 @@ void EeCpu::inst_special(uint32_t byte) {
 			write_reg_low(rd, regs[rs].low);
 		}
 	}
+	// SYSCALL
+	else if (func == 0b001100) {
+		raise_level1_exception(0x80000180, 0x8);
+	}
 	// BREAK
 	else if (func == 0b001101) {
 		raise_level2_exception(0x80000100, 0x9);
@@ -171,12 +175,28 @@ void EeCpu::inst_special(uint32_t byte) {
 		}
 		hi_lo = static_cast<uint64_t>(mod) << 32 | res;
 	}
+	// ADD
+	else if (func == 0b100000) {
+		uint8_t rs = byte >> 21 & 0b11111;
+		uint8_t rt = byte >> 16 & 0b11111;
+		uint8_t rd = byte >> 11 & 0b11111;
+		auto res = static_cast<int32_t>(regs[rs].low + regs[rt].low);
+		write_reg_low(rd, static_cast<int64_t>(res));
+	}
 	// ADDU
 	else if (func == 0b100001) {
 		uint8_t rs = byte >> 21 & 0b11111;
 		uint8_t rt = byte >> 16 & 0b11111;
 		uint8_t rd = byte >> 11 & 0b11111;
 		auto res = static_cast<int32_t>(regs[rs].low + regs[rt].low);
+		write_reg_low(rd, static_cast<int64_t>(res));
+	}
+	// SUB
+	else if (func == 0b100010) {
+		uint8_t rs = byte >> 21 & 0b11111;
+		uint8_t rt = byte >> 16 & 0b11111;
+		uint8_t rd = byte >> 11 & 0b11111;
+		auto res = static_cast<int32_t>(regs[rs].low - regs[rt].low);
 		write_reg_low(rd, static_cast<int64_t>(res));
 	}
 	// SUBU
@@ -207,6 +227,11 @@ void EeCpu::inst_special(uint32_t byte) {
 		uint8_t rt = byte >> 16 & 0b11111;
 		uint8_t rd = byte >> 11 & 0b11111;
 		write_reg_low(rd, ~(regs[rs].low | regs[rt].low));
+	}
+	// MFSA
+	else if (func == 0b101000) {
+		uint8_t rd = byte >> 11 & 0b11111;
+		write_reg_low(rd, sa);
 	}
 	// SLT
 	else if (func == 0b101010) {

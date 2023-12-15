@@ -1,10 +1,9 @@
 #include "bus.hpp"
-#include "ee/cpu.hpp"
 #include <fstream>
-#include <cassert>
 #include <iostream>
 
-Bus::Bus(const std::string& bios_name) {
+
+Bus::Bus(const std::string& bios_name, uint32_t* tex_target) : gs {*this, tex_target} {
 	bios.resize(1024 * 1024 * 4);
 	main_ram.resize(1024 * 1024 * 32);
 	iop_ram.resize(1024 * 1024 * 2);
@@ -14,6 +13,7 @@ Bus::Bus(const std::string& bios_name) {
 	vu1_data.resize(1024 * 16);
 	std::ifstream file {bios_name, std::ios::binary};
 	file.read(reinterpret_cast<char*>(bios.data()), 1024 * 1024 * 4);
+	gs.vram.resize(1024 * 1024 * 4);
 }
 
 uint8_t Bus::read8(uint32_t addr) {
@@ -49,6 +49,13 @@ uint16_t Bus::read16(uint32_t addr) {
 }
 
 uint32_t Bus::read32(uint32_t addr) {
+	if (addr < 0x2000000) {
+		return *(uint32_t*) &main_ram[addr];
+	}
+	if (addr >= 0x1FC00000 && addr < 0x20000000) {
+		return *(uint32_t*) &bios[addr - 0x1FC00000];
+	}
+
 	if (addr == 0x10000000) {
 		return timers[0].counter;
 	}
@@ -75,6 +82,10 @@ uint32_t Bus::read32(uint32_t addr) {
 	// SIF_MSCOM
 	else if (addr == 0x1000F200) {
 		return sif.mscom;
+	}
+	// SIF_SMCOM
+	else if (addr == 0x1000F210) {
+		return sif.smcom;
 	}
 	// SIF_MSFLG
 	else if (addr == 0x1000F220) {
@@ -111,9 +122,8 @@ uint32_t Bus::read32(uint32_t addr) {
 		}
 		return 0;
 	}
-	// DMAC SIF0
-	else if (addr == 0x1000C000) {
-		return dmac.sif0.chcr;
+	else if (addr >= 0x10008000 && addr <= 0x1000D480) {
+		return dmac.read(addr);
 	}
 	// unknown
 	else if (addr == 0x1000F130 || (addr >= 0x1000F400 && addr < 0x1000F500)) {
@@ -143,11 +153,23 @@ uint32_t Bus::read32(uint32_t addr) {
 	else if (addr == 0x1000E050) {
 		return dmac.rbor;
 	}
+	// GS_CSR
+	else if (addr == 0x12001000) {
+		return gs.csr;
+	}
 
 	return read16(addr) | read16(addr + 2) << 16;
 }
 
 uint64_t Bus::read64(uint32_t addr) {
+	if (addr < 0x2000000) {
+		return *(uint64_t*) (&main_ram[addr]);
+	}
+	// GS_CSR
+	else if (addr == 0x12001000) {
+		return gs.csr;
+	}
+
 	return read32(addr) | static_cast<uint64_t>(read32(addr + 4)) << 32;
 }
 
@@ -250,11 +272,11 @@ void Bus::write32(uint32_t addr, uint32_t value) {
 	}
 	// EE INTC_STAT
 	else if (addr == 0x1000F000) {
-		ee_cpu.intc_stat = value;
+		ee_cpu.intc_stat = 0;
 	}
 	// EE INTC_MASK
 	else if (addr == 0x1000F010) {
-		ee_cpu.intc_mask = value;
+		ee_cpu.intc_mask ^= value;
 	}
 	// IPU_CMD
 	else if (addr == 0x10002000) {
@@ -304,229 +326,16 @@ void Bus::write32(uint32_t addr, uint32_t value) {
 	else if (addr == 0x1000F220) {
 		sif.msflg = value;
 	}
+	// SIF_SMFLG
+	else if (addr == 0x1000F230) {
+		sif.smflg = value;
+	}
 	// SIF_CTRL
 	else if (addr == 0x1000F240) {
 		sif.ctrl = value;
 	}
-	// DMAC VIF0
-	else if (addr == 0x10008000) {
-		dmac.vif0.chcr = value;
-	}
-	else if (addr == 0x10008010) {
-		dmac.vif0.madr = value;
-	}
-	else if (addr == 0x10008020) {
-		dmac.vif0.qwc = value;
-	}
-	else if (addr == 0x10008030) {
-		dmac.vif0.tadr = value;
-	}
-	else if (addr == 0x10008040) {
-		dmac.vif0.asr0 = value;
-	}
-	else if (addr == 0x10008050) {
-		dmac.vif0.asr1 = value;
-	}
-	else if (addr == 0x10008080) {
-		dmac.vif0.sadr = value;
-	}
-	// DMAC VIF1
-	else if (addr == 0x10009000) {
-		dmac.vif1.chcr = value;
-	}
-	else if (addr == 0x10009010) {
-		dmac.vif1.madr = value;
-	}
-	else if (addr == 0x10009020) {
-		dmac.vif1.qwc = value;
-	}
-	else if (addr == 0x10009030) {
-		dmac.vif1.tadr = value;
-	}
-	else if (addr == 0x10009040) {
-		dmac.vif1.asr0 = value;
-	}
-	else if (addr == 0x10009050) {
-		dmac.vif1.asr1 = value;
-	}
-	else if (addr == 0x10009080) {
-		dmac.vif1.sadr = value;
-	}
-	// DMAC GIF
-	else if (addr == 0x1000A000) {
-		dmac.gif.chcr = value;
-	}
-	else if (addr == 0x1000A010) {
-		dmac.gif.madr = value;
-	}
-	else if (addr == 0x1000A020) {
-		dmac.gif.qwc = value;
-	}
-	else if (addr == 0x1000A030) {
-		dmac.gif.tadr = value;
-	}
-	else if (addr == 0x1000A040) {
-		dmac.gif.asr0 = value;
-	}
-	else if (addr == 0x1000A050) {
-		dmac.gif.asr1 = value;
-	}
-	else if (addr == 0x1000A080) {
-		dmac.gif.sadr = value;
-	}
-	// DMAC IPU_FROM
-	else if (addr == 0x1000B000) {
-		dmac.ipu_from.chcr = value;
-	}
-	else if (addr == 0x1000B010) {
-		dmac.ipu_from.madr = value;
-	}
-	else if (addr == 0x1000B020) {
-		dmac.ipu_from.qwc = value;
-	}
-	else if (addr == 0x1000B030) {
-		dmac.ipu_from.tadr = value;
-	}
-	else if (addr == 0x1000B040) {
-		dmac.ipu_from.asr0 = value;
-	}
-	else if (addr == 0x1000B050) {
-		dmac.ipu_from.asr1 = value;
-	}
-	else if (addr == 0x1000B080) {
-		dmac.ipu_from.sadr = value;
-	}
-	// DMAC IPU_TO
-	else if (addr == 0x1000B400) {
-		dmac.ipu_to.chcr = value;
-	}
-	else if (addr == 0x1000B410) {
-		dmac.ipu_to.madr = value;
-	}
-	else if (addr == 0x1000B420) {
-		dmac.ipu_to.qwc = value;
-	}
-	else if (addr == 0x1000B430) {
-		dmac.ipu_to.tadr = value;
-	}
-	else if (addr == 0x1000B440) {
-		dmac.ipu_to.asr0 = value;
-	}
-	else if (addr == 0x1000B450) {
-		dmac.ipu_to.asr1 = value;
-	}
-	else if (addr == 0x1000B480) {
-		dmac.ipu_to.sadr = value;
-	}
-	// DMAC SIF0
-	else if (addr == 0x1000C000) {
-		dmac.sif0.chcr = value;
-	}
-	else if (addr == 0x1000C010) {
-		dmac.sif0.madr = value;
-	}
-	else if (addr == 0x1000C020) {
-		dmac.sif0.qwc = value;
-	}
-	else if (addr == 0x1000C030) {
-		dmac.sif0.tadr = value;
-	}
-	else if (addr == 0x1000C040) {
-		dmac.sif0.asr0 = value;
-	}
-	else if (addr == 0x1000C050) {
-		dmac.sif0.asr1 = value;
-	}
-	else if (addr == 0x1000C080) {
-		dmac.sif0.sadr = value;
-	}
-	// DMAC SIF1
-	else if (addr == 0x1000C400) {
-		dmac.sif1.chcr = value;
-	}
-	else if (addr == 0x1000C410) {
-		dmac.sif1.madr = value;
-	}
-	else if (addr == 0x1000C420) {
-		dmac.sif1.qwc = value;
-	}
-	else if (addr == 0x1000C430) {
-		dmac.sif1.tadr = value;
-	}
-	else if (addr == 0x1000C440) {
-		dmac.sif1.asr0 = value;
-	}
-	else if (addr == 0x1000C450) {
-		dmac.sif1.asr1 = value;
-	}
-	else if (addr == 0x1000C480) {
-		dmac.sif1.sadr = value;
-	}
-	// DMAC SIF2
-	else if (addr == 0x1000C800) {
-		dmac.sif2.chcr = value;
-	}
-	else if (addr == 0x1000C810) {
-		dmac.sif2.madr = value;
-	}
-	else if (addr == 0x1000C820) {
-		dmac.sif2.qwc = value;
-	}
-	else if (addr == 0x1000C830) {
-		dmac.sif2.tadr = value;
-	}
-	else if (addr == 0x1000C840) {
-		dmac.sif2.asr0 = value;
-	}
-	else if (addr == 0x1000C850) {
-		dmac.sif2.asr1 = value;
-	}
-	else if (addr == 0x1000C880) {
-		dmac.sif2.sadr = value;
-	}
-	// DMAC SPR_FROM
-	else if (addr == 0x1000D000) {
-		dmac.spr_from.chcr = value;
-	}
-	else if (addr == 0x1000D010) {
-		dmac.spr_from.madr = value;
-	}
-	else if (addr == 0x1000D020) {
-		dmac.spr_from.qwc = value;
-	}
-	else if (addr == 0x1000D030) {
-		dmac.spr_from.tadr = value;
-	}
-	else if (addr == 0x1000D040) {
-		dmac.spr_from.asr0 = value;
-	}
-	else if (addr == 0x1000D050) {
-		dmac.spr_from.asr1 = value;
-	}
-	else if (addr == 0x1000D080) {
-		dmac.spr_from.sadr = value;
-	}
-	// DMAC SPR_TO
-	else if (addr == 0x1000D400) {
-		dmac.spr_to.chcr = value;
-	}
-	else if (addr == 0x1000D410) {
-		dmac.spr_to.madr = value;
-	}
-	else if (addr == 0x1000D420) {
-		dmac.spr_to.qwc = value;
-	}
-	else if (addr == 0x1000D430) {
-		dmac.spr_to.tadr = value;
-	}
-	else if (addr == 0x1000D440) {
-		dmac.spr_to.asr0 = value;
-	}
-	else if (addr == 0x1000D450) {
-		dmac.spr_to.asr1 = value;
-	}
-	else if (addr == 0x1000D480) {
-		dmac.spr_to.sadr = value;
+	else if (addr >= 0x10008000 && addr <= 0x1000D480) {
+		dmac.write(addr, value);
 	}
 	// DMAC D_CTRL
 	else if (addr == 0x1000E000) {
@@ -552,6 +361,10 @@ void Bus::write32(uint32_t addr, uint32_t value) {
 	else if (addr == 0x1000E050) {
 		dmac.rbor = value;
 	}
+	// DMAC D_ENABLEW
+	else if (addr == 0x1000F590) {
+		dmac.enablew = value;
+	}
 	// unknown dram
 	else if (addr == 0x1000F440) {
 		mch_drd = value;
@@ -572,6 +385,11 @@ void Bus::write32(uint32_t addr, uint32_t value) {
 		(addr >= 0x1000F400 && addr < 0x1000F520)) {
 
 	}
+	// GS_CSR
+	else if (addr == 0x12001000) {
+		gs.csr &= 0xFFFFFFFF00000000;
+		gs.csr |= value;
+	}
 	else {
 		write16(addr, value);
 		write16(addr + 2, value >> 16);
@@ -579,9 +397,26 @@ void Bus::write32(uint32_t addr, uint32_t value) {
 }
 
 void Bus::write64(uint32_t addr, uint64_t value) {
+	if (addr < 0x2000000) {
+		*(uint64_t*) (&main_ram[addr]) = value;
+		return;
+	}
+	else if (addr == 0x12000000) {
+		gs.pmode = value;
+	}
+	else if (addr == 0x12000090) {
+		gs.dispfb2 = value;
+	}
+	else if (addr == 0x120000A0) {
+		gs.display2 = value;
+	}
 	// GS_CSR
-	if (addr == 0x12001000) {
+	else if (addr == 0x12001000) {
 		gs.csr = value;
+	}
+	// GS_IMR
+	else if (addr == 0x12001010) {
+		gs.imr = value;
 	}
 	// GIF FIFO
 	else if (addr == 0x10006000) {

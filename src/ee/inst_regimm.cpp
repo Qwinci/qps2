@@ -26,6 +26,34 @@ void EeCpu::inst_regimm(uint32_t byte) {
 			new_pc = pc + imm;
 		}
 	}
+	// BLTZL
+	else if (func == 0b00010) {
+		assert(!in_branch_delay);
+
+		uint8_t rs = byte >> 21 & 0b11111;
+		auto imm = static_cast<int32_t>(static_cast<int16_t>((byte & 0xFFFF))) << 2;
+		if (static_cast<int64_t>(regs[rs].low) < 0) {
+			in_branch_delay = true;
+			new_pc = pc + imm;
+		}
+		else {
+			pc += 4;
+		}
+	}
+	// BGEZL
+	else if (func == 0b00011) {
+		assert(!in_branch_delay);
+
+		uint8_t rs = byte >> 21 & 0b11111;
+		auto imm = static_cast<int32_t>(static_cast<int16_t>((byte & 0xFFFF))) << 2;
+		if (static_cast<int64_t>(regs[rs].low) >= 0) {
+			in_branch_delay = true;
+			new_pc = pc + imm;
+		}
+		else {
+			pc += 4;
+		}
+	}
 	else {
 		std::cerr << "unimplemented regimm func "
 		          << std::hex << std::uppercase << static_cast<unsigned int>(func)

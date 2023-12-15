@@ -1,4 +1,5 @@
 #pragma once
+#include <cstdint>
 
 struct Bus;
 
@@ -21,15 +22,10 @@ struct Dmac {
 		uint32_t asr0;
 		uint32_t asr1;
 		uint32_t sadr;
+		bool tag_end {};
 	};
-	Channel vif0 {};
-	Channel vif1 {};
-	Channel gif {};
-	Channel ipu_from {};
-	Channel ipu_to {};
-	Channel sif0 {};
-	Channel sif1 {};
-	Channel sif2 {};
-	Channel spr_from {};
-	Channel spr_to {};
+	Channel channels[10] {};
+
+	void write(uint32_t addr, uint32_t value);
+	uint32_t read(uint32_t addr);
 };

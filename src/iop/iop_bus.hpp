@@ -1,0 +1,24 @@
+#pragma once
+#include <cstdint>
+#include "dma.hpp"
+#include "cdvd.hpp"
+#include "iop_timer.hpp"
+
+struct Bus;
+
+struct IopBus {
+	Bus& bus;
+	IopDma dma {bus};
+	Cdvd cdvd {};
+	IopTimer timers[5] {};
+	uint32_t i_mask {};
+	uint32_t i_ctrl {};
+
+	uint8_t read8(uint32_t addr);
+	uint16_t read16(uint32_t addr);
+	uint32_t read32(uint32_t addr);
+
+	void write8(uint32_t addr, uint8_t value);
+	void write16(uint32_t addr, uint16_t value);
+	void write32(uint32_t addr, uint32_t value);
+};

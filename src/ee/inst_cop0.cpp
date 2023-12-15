@@ -49,14 +49,39 @@ void EeCpu::inst_cop0(uint32_t byte) {
 		else if (fmt == 0b001000) {
 			TODO("TLBP");
 		}
+		// ERET
 		else if (fmt == 0b011000) {
-			TODO("ERET");
+			auto status = co0.get_reg(Cop0Reg::Status);
+
+			// ERL
+			if (status & 1 << 2) {
+				pc = co0.get_reg(Cop0Reg::ErrorEpc);
+				co0.get_reg(Cop0Reg::Status) = status & ~(1 << 2);
+			}
+			else {
+				pc = co0.get_reg(Cop0Reg::Epc);
+				// disable EXL
+				co0.get_reg(Cop0Reg::Status) = status & ~(1 << 1);
+			}
 		}
 		else if (fmt == 0b111000) {
-			TODO("EI");
+			auto status = co0.get_reg(Cop0Reg::Status);
+			// EXL/ERL, KSU in kernel or EDI enabled
+			if ((status & 1 << 1) || (status & 1 << 2) ||
+			    (status >> 3 & 0b11) == 0 || (status & 1 << 17)) {
+				// enable EIE
+				co0.get_reg(Cop0Reg::Status) = status | 1 << 16;
+			}
 		}
+		// DI
 		else if (fmt == 0b111001) {
-			TODO("DI");
+			auto status = co0.get_reg(Cop0Reg::Status);
+			// EXL/ERL, KSU in kernel or EDI enabled
+			if ((status & 1 << 1) || (status & 1 << 2) ||
+				(status >> 3 & 0b11) == 0 || (status & 1 << 17)) {
+				// disable EIE
+				co0.get_reg(Cop0Reg::Status) = status & ~(1 << 16);
+			}
 		}
 		else {
 			UNREACHABLE("invalid TLB instruction");
