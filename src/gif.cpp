@@ -47,11 +47,34 @@ void Gif::fifo_write(Uint128 packet) {
 			if (reg == 0) {
 				bus.gs.prim = packet.low & 0x7FF;
 			}
+			else if (reg == 1) {
+				bus.gs.rgbaq.red = packet.low & 0xFF;
+				bus.gs.rgbaq.green = packet.low >> 32 & 0xFF;
+				bus.gs.rgbaq.blue = packet.high & 0xFF;
+				bus.gs.rgbaq.alpha = packet.high >> 32 & 0xFF;
+			}
+			else if (reg == 4) {
+				// x
+				uint64_t data = packet.low & 0xFFFF;
+				// y
+				data |= (packet.low >> 32 & 0xFFFF) << 16;
+				// z
+				data |= (packet.high >> 4 & 0xFFFFFF) << 32;
+				// f
+				data |= (packet.high >> 36 & 0xFF) << 56;
+				// disable drawing
+				if (packet.high & 1ULL << 47) {
+					bus.gs.write_reg(0xC, data);
+				}
+				else {
+					bus.gs.write_reg(0x4, data);
+				}
+			}
 			else if (reg == 0xE) {
 				reg = packet.high & 0xFF;
 				bus.gs.write_reg(reg, packet.low);
 			}
-			else if (reg == 1 || reg == 2 || reg == 3 || reg == 4 || reg == 5 || reg == 0xA ||
+			else if (reg == 2 || reg == 3 || reg == 5 || reg == 0xA ||
 				reg == 0xF) {
 				assert(false && "unimplemented gs reg accessed");
 			}

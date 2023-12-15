@@ -32,6 +32,38 @@ void Gs::write_reg(uint8_t reg, uint64_t data) {
 		rgbaq.alpha = data >> 24 & 0xFF;
 		rgbaq.q = data >> 32;
 	}
+	else if (reg == 0x04) {
+		uint16_t x = data & 0xFFFF;
+		uint16_t y = data >> 16 & 0xFFFF;
+		uint32_t z = data >> 32 & 0xFFFFFF;
+		uint8_t f = data >> 56;
+
+		const auto& ctx = contexts[(prim & 1 << 9) ? 1 : 0];
+
+		vertex_queue[vertex_count++] = {
+			.x = static_cast<uint16_t>(x - ctx.x_off),
+			.y = static_cast<uint16_t>(y - ctx.y_off),
+			.z = z,
+			.r = rgbaq.red,
+			.g = rgbaq.green,
+			.b = rgbaq.blue,
+			.a = rgbaq.alpha
+		};
+
+		auto needed = VERTICES_IN_PRIM[prim & 0b111];
+		if (vertex_count == needed) {
+			auto type = prim & 0b111;
+			if (type == 3) {
+				draw_triangle();
+			}
+			else if (type == 6) {
+				draw_sprite();
+			}
+			else {
+				assert(false);
+			}
+		}
+	}
 	else if (reg == 0x05) {
 		uint16_t x = data & 0xFFFF;
 		uint16_t y = data >> 16 & 0xFFFF;
@@ -227,6 +259,9 @@ void Gs::write_reg(uint8_t reg, uint64_t data) {
 				}
 			}
 		}
+		else if (transfer.transfer_dir == 1) {
+			assert(false);
+		}
 
 		if (transfer.transfer_dir != 3) {
 			transfer.in_progress = true;
@@ -244,7 +279,7 @@ void Gs::write_reg(uint8_t reg, uint64_t data) {
 	}
 }
 
-void Gs::draw_pixel(uint16_t x, uint16_t y, uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
+void Gs::draw_pixel(uint16_t x, uint16_t y, uint32_t z, uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
 	x = std::min<uint16_t>(x, SCREEN_WIDTH - 1);
 	y = std::min<uint16_t>(y, SCREEN_HEIGHT - 1);
 
@@ -254,12 +289,41 @@ void Gs::draw_pixel(uint16_t x, uint16_t y, uint8_t r, uint8_t g, uint8_t b, uin
 	auto fb_base_ptr = ctx.frame.base_ptr * 4 * 2048;
 	auto fb_width = ctx.frame.buf_width * 64;
 
-	uint32_t value = a | b << 8 | g << 16 | r << 24;
+	auto z_buf_base_ptr = ctx.z_buf.base_ptr * 4 * 2048;
+	uint32_t z_value;
+	if (ctx.z_buf.fmt == 0) {
+		z_value = *(uint32_t*) &vram[z_buf_base_ptr + y * fb_width * 4 + x * 4];
+	}
+	else if (ctx.z_buf.fmt == 1) {
+		z_value = *(uint32_t*) &vram[z_buf_base_ptr + y * fb_width * 4 + x * 4];
+		z_value &= 0xFFFFFF;
+	}
+	else {
+		assert(false);
+	}
+
+	if (ctx.test.depth_test_method == 0) {
+		return;
+	}
+	else if (ctx.test.depth_test_method == 2 || ctx.test.depth_test_method == 3) {
+		if ((ctx.test.depth_test_method == 2 && z < z_value) ||
+			(ctx.test.depth_test_method == 3 && z <= z_value)) {
+			return;
+		}
+	}
+
+	if (!ctx.z_buf.buf_mask) {
+		*(uint32_t*) &vram[z_buf_base_ptr + y * fb_width * 4 + x * 4] = z;
+	}
+
 	uint32_t rgba = *(uint32_t*) &vram[fb_base_ptr + y * fb_width * 4 + x * 4];
-	value |= (rgba & 0xFF) << 24 |
-		(rgba >> 8 & 0xFF) << 16 |
-		(rgba >> 16 & 0xFF) << 8 |
-		(rgba >> 24);
+	uint32_t fb_value = rgba | a << 24 | b << 16 | g << 8 | r;
+	uint32_t value = (fb_value & 0xFF) << 24 |
+		(fb_value >> 8 & 0xFF) << 16 |
+		(fb_value >> 16 & 0xFF) << 8 |
+		(fb_value >> 24);
+
+	*(uint32_t*) &vram[fb_base_ptr + y * fb_width * 4 + x * 4] = fb_value;
 	target[y * SCREEN_WIDTH + x] = value;
 }
 
@@ -278,7 +342,54 @@ void Gs::draw_sprite() {
 
 	for (uint16_t y = first.y; y < second.y; ++y) {
 		for (uint16_t x = first.x; x < second.x; ++x) {
-			draw_pixel(x, y, first.r, first.g, first.b, first.a);
+			draw_pixel(x, y, first.z, first.r, first.g, first.b, first.a);
+		}
+	}
+}
+
+static bool edge_function(const Gs::Vertex& a, const Gs::Vertex& b, uint32_t point_x, uint32_t point_y) {
+	return (point_x - a.x) * (b.y - a.y) - (point_y - a.y) * (b.x - a.x) >= 0;
+}
+
+void Gs::draw_triangle() {
+	auto first = vertex_queue[0];
+	auto second = vertex_queue[1];
+	auto third = vertex_queue[2];
+	vertex_count = 0;
+
+	first.x /= 16;
+	first.y /= 16;
+	second.x /= 16;
+	second.y /= 16;
+	third.x /= 16;
+	third.y /= 16;
+
+	auto left_bottom_x = first.x;
+	if (second.x < left_bottom_x) left_bottom_x = second.x;
+	if (third.x < left_bottom_x) left_bottom_x = third.x;
+
+	auto left_bottom_y = first.y;
+	if (second.y < left_bottom_y) left_bottom_y = second.y;
+	if (third.y < left_bottom_y) left_bottom_y = third.y;
+
+	auto right_top_x = second.x;
+	if (first.x > right_top_x) right_top_x = first.x;
+	if (third.x > right_top_x) right_top_x = third.x;
+
+	auto right_top_y = second.y;
+	if (first.y > right_top_y) right_top_y = first.y;
+	if (third.y > right_top_y) right_top_y = third.y;
+
+	for (uint16_t y = left_bottom_y; y < right_top_y; ++y) {
+		for (uint16_t x = left_bottom_x; x < right_top_x; ++x) {
+			bool inside_tri = true;
+			inside_tri &= edge_function(first, second, x, y);
+			inside_tri &= edge_function(second, third, x, y);
+			inside_tri &= edge_function(third, first, x, y);
+
+			if (inside_tri) {
+				draw_pixel(x, y, first.z, first.r, first.g, first.b, first.a);
+			}
 		}
 	}
 }
