@@ -129,6 +129,7 @@ void Dmac::write(uint32_t addr, uint32_t value) {
 					else {
 						assert(false);
 					}
+					channel->qwc = tag[0] & 0xFFFF;
 				}
 
 				channel->chcr &= ~D_CHCR_STR;
