@@ -1,4 +1,5 @@
 #include <cassert>
+#include <algorithm>
 #include "gs.hpp"
 #include <SDL.h>
 
@@ -338,14 +339,8 @@ void Gs::draw_sprite() {
 	}
 }
 
-static bool edge_function(const Gs::Vertex& a, const Gs::Vertex& b, uint32_t point_x, uint32_t point_y) {
-	auto p_x = static_cast<int16_t>(point_x);
-	auto p_y = static_cast<int16_t>(point_y);
-	auto a_x = static_cast<int16_t>(a.x);
-	auto b_x = static_cast<int16_t>(b.x);
-	auto a_y = static_cast<int16_t>(a.y);
-	auto b_y = static_cast<int16_t>(b.y);
-	return (p_x - a_x) * (b_y - a_y) - (p_y - a_y) * (b_x - a_x) >= 0;
+int orient_2d(const Gs::Vertex& a, const Gs::Vertex& b, const Gs::Vertex& c) {
+	return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
 }
 
 void Gs::draw_triangle() {
@@ -361,50 +356,35 @@ void Gs::draw_triangle() {
 	third.x /= 16;
 	third.y /= 16;
 
-	auto left_bottom_x = first.x;
-	if (second.x < left_bottom_x) left_bottom_x = second.x;
-	if (third.x < left_bottom_x) left_bottom_x = third.x;
+	// if the vertices is in ccw order flip them
+	if (orient_2d(first, second, third) < 0) {
+		std::swap(second, third);
+	}
 
-	auto left_bottom_y = first.y;
-	if (second.y < left_bottom_y) left_bottom_y = second.y;
-	if (third.y < left_bottom_y) left_bottom_y = third.y;
+	auto left_bottom_x = std::min({first.x, second.x, third.x});
+	auto left_bottom_y = std::min({first.y, second.y, third.y});
+	auto right_top_x = std::max({first.x, second.x, third.x});
+	auto right_top_y = std::max({first.y, second.y, third.y});
 
-	auto right_top_x = second.x;
-	if (first.x > right_top_x) right_top_x = first.x;
-	if (third.x > right_top_x) right_top_x = third.x;
+	auto area = static_cast<float>(orient_2d(first, second, third));
 
-	auto right_top_y = second.y;
-	if (first.y > right_top_y) right_top_y = first.y;
-	if (third.y > right_top_y) right_top_y = third.y;
-
-	for (uint16_t y = left_bottom_y; y < right_top_y; ++y) {
-		for (uint16_t x = left_bottom_x; x < right_top_x; ++x) {
-			bool inside_tri = true;
-			inside_tri &= edge_function(first, second, x, y);
-			inside_tri &= edge_function(second, third, x, y);
-			inside_tri &= edge_function(third, first, x, y);
-
-			auto get_distance = [](Vertex& vert, uint16_t x, uint16_t y) {
-				auto x_dist = static_cast<uint16_t>(std::abs(static_cast<int32_t>(vert.x) - static_cast<int32_t>(x)));
-				auto y_dist = static_cast<uint16_t>(std::abs(static_cast<int32_t>(vert.y) - static_cast<int32_t>(y)));
-				return static_cast<uint32_t>(x_dist + y_dist);
+	for (uint16_t y = left_bottom_y; y <= right_top_y; ++y) {
+		for (uint16_t x = left_bottom_x; x <= right_top_x; ++x) {
+			Vertex point {
+				.x = x,
+				.y = y
 			};
-
-			if (inside_tri) {
-				auto first_dist = get_distance(first, x, y);
-				auto second_dist = get_distance(second, x, y);
-				auto third_dist = get_distance(third, x, y);
-				Vertex* vert;
-				if (first_dist < second_dist && first_dist < third_dist) {
-					vert = &first;
-				}
-				else if (second_dist < first_dist && second_dist < third_dist) {
-					vert = &second;
-				}
-				else {
-					vert = &third;
-				}
-				draw_pixel(x, y, vert->z, vert->r, vert->g, vert->b, vert->a);
+			int w0 = orient_2d(second, third, point);
+			int w1 = orient_2d(third, first, point);
+			int w2 = orient_2d(first, second, point);
+			if (w0 >= 0 && w1 >= 0 && w2 >= 0) {
+				auto z = static_cast<float>(first.z * w0 + second.z * w1 + third.z * w2);
+				z /= area;
+				int r = static_cast<int>(static_cast<float>(first.r * w0 + second.r * w1 + third.r * w2) / area);
+				int g = static_cast<int>(static_cast<float>(first.g * w0 + second.g * w1 + third.g * w2) / area);
+				int b = static_cast<int>(static_cast<float>(first.b * w0 + second.b * w1 + third.b * w2) / area);
+				int a = static_cast<int>(static_cast<float>(first.a * w0 + second.a * w1 + third.a * w2) / area);
+				draw_pixel(x, y, (uint32_t) z, r, g, b, a);
 			}
 		}
 	}
