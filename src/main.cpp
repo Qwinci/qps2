@@ -1,4 +1,5 @@
 #include "bus.hpp"
+#include "scheduler.hpp"
 #include <SDL.h>
 #include <cassert>
 
@@ -31,17 +32,29 @@ int main() {
 
 	while (running) {
 		auto frame_start = SDL_GetPerformanceCounter();
-		for (size_t i = 0; i < EE_CYCLES_IN_NTSC_VBLANK; ++i) {
-			if (i == EE_CYCLES_IN_NTSC_HBLANK) {
+		bool frame_ready = false;
+		bus.scheduler.schedule_event({
+			.cycles = EE_CYCLES_BETWEEN_NTSC_VBLANK,
+			.fn = [&]() {
+				// VBLANK start
+				bus.ee_cpu.raise_int0(2);
+				bus.gs.csr |= 1U << 3;
+				frame_ready = true;
+			}
+		});
+		bus.scheduler.schedule_event({
+			.cycles = EE_CYCLES_BETWEEN_NTSC_VBLANK + EE_CYCLES_IN_NTSC_VBLANK,
+			.fn = [&]() {
+				// VBLANK end
+				bus.ee_cpu.raise_int0(3);
 				bus.gs.csr &= ~(1U << 3);
 			}
-			bus.ee_cpu.clock();
+		});
+		while (!frame_ready) {
+			bus.scheduler.run();
 		}
 		auto cpu_frame_end = SDL_GetPerformanceCounter();
 
-		// VBLANK start
-		bus.ee_cpu.raise_int0(2);
-		bus.gs.csr |= 1U << 3;
 		SDL_Event event;
 		while (SDL_PollEvent(&event)) {
 			if (event.type == SDL_QUIT) {

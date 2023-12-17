@@ -8,6 +8,7 @@
 #include "vif.hpp"
 #include "ipu.hpp"
 #include "sif.hpp"
+#include "scheduler.hpp"
 #include <cstdint>
 #include <vector>
 #include <string>
@@ -42,6 +43,7 @@ struct Bus {
 	Vif vif1 {*this};
 	Ipu ipu {*this};
 	Sif sif {*this};
+	Scheduler scheduler {*this};
 	uint32_t mch_ricm {};
 	uint32_t mch_drd {};
 	uint8_t rdram_dev_id {};

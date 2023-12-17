@@ -37,16 +37,6 @@ void EeCpu::clock() {
 
 	co0.get_reg(Cop0Reg::Count) += 1;
 
-	auto cur_clock = clock_counter++;
-	// bus is clocked twice as slow as the cpu
-	if ((cur_clock & 1) == 0) {
-		bus.clock();
-	}
-	// iop is clocked 8x slow as the cpu
-	if ((cur_clock & 7) == 0) {
-		bus.iop_cpu.clock();
-	}
-
 	auto byte = read32(pc);
 	pc += 4;
 

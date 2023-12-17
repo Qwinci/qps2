@@ -51,7 +51,6 @@ enum class Cop0Reg {
 struct EeCpu {
 	explicit EeCpu(Bus& bus);
 	Bus& bus;
-	uint8_t clock_counter {};
 
 	void clock();
 	inline constexpr Register& get_reg(Reg reg) {
@@ -135,5 +134,6 @@ struct EeCpu {
 };
 
 #define EE_HZ 295000000ULL
-#define EE_CYCLES_IN_NTSC_VBLANK 4921588
-#define EE_CYCLES_IN_NTSC_HBLANK 18749
+#define EE_CYCLES_IN_NTSC_SCANLINE (84)
+#define EE_CYCLES_IN_NTSC_VBLANK (EE_CYCLES_IN_NTSC_SCANLINE * 23)
+#define EE_CYCLES_BETWEEN_NTSC_VBLANK (4921588 - EE_CYCLES_IN_NTSC_VBLANK)

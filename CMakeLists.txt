@@ -31,6 +31,8 @@ add_executable(qps2
 	src/iop/inst_regimm.cpp
 	src/iop/dma.cpp
 	src/iop/cdvd.cpp
+
+	src/scheduler.cpp
 )
 target_include_directories(qps2 PRIVATE src)
 target_link_libraries(qps2 PRIVATE SDL2::SDL2)
