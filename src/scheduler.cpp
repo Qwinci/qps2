@@ -29,6 +29,12 @@ void Scheduler::run() {
 		bus.clock();
 	}
 
+	for (size_t i = 0; i < bus_cycles; ++i) {
+		bus.dmac.clock_sif();
+		// todo maybe this is slower?
+		bus.iop_cpu.iop_bus.dma.clock_sif();
+	}
+
 	size_t iop_cycles = run_cycles / 8;
 	iop_cycles_remaining += run_cycles % 8;
 	if (iop_cycles_remaining >= 8) {

@@ -202,6 +202,14 @@ void IopCpu::inst_normal(uint32_t byte) {
 		uint32_t addr = regs[base] + offset;
 		write32(addr, regs[rt]);
 	}
+	// LWC0
+	else if (op == 0b110000) {
+		uint8_t base = byte >> 21 & 0b11111;
+		uint8_t rt = byte >> 16 & 0b11111;
+		auto offset = static_cast<int16_t>(byte & 0xFFFF);
+		uint32_t addr = regs[base] + offset;
+		co0.regs[rt] = read32(addr);
+	}
 	else {
 		std::cerr << "unimplemented iop op "
 		          << std::hex << std::uppercase << byte << std::dec << '\n';

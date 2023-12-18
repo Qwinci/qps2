@@ -73,7 +73,6 @@ void Dmac::write(uint32_t addr, uint32_t value) {
 		else if (base == 0x1000C400) {
 			assert(mode == 1);
 			assert(!channel->qwc && "not implemented");
-			assert(false);
 		}
 		// GIF
 		else if (base == 0x1000A000) {
@@ -111,7 +110,7 @@ void Dmac::write(uint32_t addr, uint32_t value) {
 					uint64_t tag[2];
 					tag[0] = bus.read64(channel->tadr);
 					tag[1] = bus.read64(channel->tadr + 8);
-					irq = tag[0] >> 31;
+					irq = tag[0] >> 31 & 1;
 
 					uint8_t id = tag[0] >> 28 & 0b111;
 					if (id == 0) {
@@ -225,5 +224,115 @@ uint32_t Dmac::read(uint32_t addr) {
 	}
 	else {
 		return 0;
+	}
+}
+
+void Dmac::clock_sif() {
+	if (enablew & 1U << 16) {
+		return;
+	}
+
+	// SIF0 from IOP
+	auto& sif0 = channels[5];
+	if ((sif0.chcr & D_CHCR_STR)) {
+		if (sif0.tag_end && !sif0.qwc) {
+			sif0.tag_end = false;
+			sif0.chcr &= ~D_CHCR_STR;
+		}
+		else if (bus.sif.sif0_fifo_size) {
+			if (!sif0.qwc) {
+				uint64_t tag = bus.sif.sif0_fifo[bus.sif.sif0_fifo_ee_ptr];
+				bus.sif.sif0_fifo_ee_ptr = (bus.sif.sif0_fifo_ee_ptr + 1) % 16;
+				bus.sif.sif0_fifo_size -= 1;
+				// todo
+				bool irq = tag >> 31 & 1;
+
+				uint8_t id = tag >> 28 & 0b111;
+				if (id == 0 || id == 1) {
+					assert(!(tag >> 63));
+					sif0.madr = tag >> 32;
+				}
+				else if (id == 7) {
+					assert(!(tag >> 63));
+					sif0.madr = tag >> 32;
+					sif0.tag_end = true;
+				}
+				else {
+					assert(false);
+				}
+				sif0.qwc = tag & 0xFFFF;
+			}
+			else if (bus.sif.sif0_fifo_size >= 2) {
+				uint64_t first = bus.sif.sif0_fifo[bus.sif.sif0_fifo_ee_ptr];
+				bus.sif.sif0_fifo_ee_ptr = (bus.sif.sif0_fifo_ee_ptr + 1) % 16;
+
+				uint64_t second = bus.sif.sif0_fifo[bus.sif.sif0_fifo_ee_ptr];
+				bus.sif.sif0_fifo_ee_ptr = (bus.sif.sif0_fifo_ee_ptr + 1) % 16;
+
+				bus.sif.sif0_fifo_size -= 2;
+
+				bus.write64(sif0.madr, first);
+				bus.write64(sif0.madr + 8, second);
+				sif0.madr += 16;
+				sif0.qwc -= 1;
+			}
+		}
+	}
+
+	// SIF1 to IOP
+	auto& sif1 = channels[6];
+	if ((sif1.chcr & D_CHCR_STR)) {
+		if (sif1.tag_end && !sif1.qwc) {
+			sif1.tag_end = false;
+			sif1.chcr &= ~D_CHCR_STR;
+			// channel 6 IRQ
+			stat |= 1U << 6;
+			if (stat & (stat >> 16 & 0x3FF)) {
+				bus.ee_cpu.raise_int1();
+			}
+		}
+		else if (bus.sif.sif1_fifo_size < 15) {
+			if (!sif1.qwc) {
+				uint64_t tag = bus.read64(sif1.tadr);
+				assert(!(sif1.chcr & D_CHCR_TTE));
+
+				bool irq = tag >> 31 & 1;
+				if (irq && sif1.chcr & D_CHCR_TIE) {
+					sif1.tag_end = true;
+				}
+
+				uint8_t id = tag >> 28 & 0b111;
+				if (id == 0) {
+					assert(!(tag >> 63));
+					sif1.madr = tag >> 32;
+					sif1.tadr += 16;
+					sif1.tag_end = true;
+				}
+				else if (id == 3) {
+					assert(!(tag >> 63));
+					sif1.madr = tag >> 32;
+					sif1.tadr += 16;
+				}
+				else {
+					assert(false);
+				}
+				sif1.qwc = tag & 0xFFFF;
+			}
+			else {
+				uint64_t first = bus.read64(sif1.madr);
+				uint64_t second = bus.read64(sif1.madr + 8);
+
+				bus.sif.sif1_fifo[bus.sif.sif1_fifo_ee_ptr] = first;
+				bus.sif.sif1_fifo_ee_ptr = (bus.sif.sif1_fifo_ee_ptr + 1) % 16;
+
+				bus.sif.sif1_fifo[bus.sif.sif1_fifo_ee_ptr] = second;
+				bus.sif.sif1_fifo_ee_ptr = (bus.sif.sif1_fifo_ee_ptr + 1) % 16;
+
+				bus.sif.sif1_fifo_size += 2;
+
+				sif1.madr += 16;
+				sif1.qwc -= 1;
+			}
+		}
 	}
 }

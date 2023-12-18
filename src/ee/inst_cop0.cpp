@@ -32,16 +32,29 @@ void EeCpu::inst_cop0(uint32_t byte) {
 		else if (fmt == 0b000010) {
 			auto index = co0.get_reg(Cop0Reg::Index);
 
-			auto page_mask = co0.get_reg(Cop0Reg::PageMask);
 			auto entry_hi = co0.get_reg(Cop0Reg::EntryHi);
 			auto entry_lo0 = co0.get_reg(Cop0Reg::EntryLo0);
 			auto entry_lo1 = co0.get_reg(Cop0Reg::EntryLo1);
-			auto vpn2 = entry_hi >> 13;
-			auto vpn = vpn2 * 2;
+			auto mask = co0.get_reg(Cop0Reg::PageMask);
 
-			auto page_size = page_mask == 0 ? 0x1000 : 0;
-			vpn *= page_size;
-			// todo implement
+			auto& entry = tlb[index];
+			entry.global = entry_lo0 & entry_lo1 & 1;
+
+			entry.even_page_valid = entry_lo0 & 1U << 1;
+			entry.even_page_dirty = entry_lo0 & 1U << 2;
+			entry.even_cache_mode = entry_lo0 >> 3 & 0b111;
+			entry.even_pfn = (entry_lo0 & ~(1U << 31)) >> 6;
+			entry.scratchpad = entry_lo0 & 1U << 31;
+
+			entry.odd_page_valid = entry_lo1 & 1U << 1;
+			entry.odd_page_dirty = entry_lo1 & 1U << 2;
+			entry.odd_cache_mode = entry_lo1 >> 3 & 0b111;
+			entry.odd_pfn = (entry_lo1 & ~(1U << 31)) >> 6;
+			entry.scratchpad = entry_lo1 & 1U << 31;
+
+			entry.asid = entry_hi & 0xFF;
+			entry.vpn2 = entry_hi >> 13;
+			entry.mask = mask;
 		}
 		else if (fmt == 0b000110) {
 			TODO("TLBWR");

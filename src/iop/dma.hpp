@@ -17,10 +17,12 @@ struct IopDma {
 		uint32_t bcr;
 		uint32_t chcr;
 		uint32_t tadr;
-		uint32_t tag_words_remaining;
+		uint32_t words_to_transfer;
 	};
 
 	std::array<Channel, 13> channels;
 
 	void write(uint32_t addr, uint32_t value);
+
+	void clock_sif();
 };

@@ -22,10 +22,12 @@ struct Dmac {
 		uint32_t asr0;
 		uint32_t asr1;
 		uint32_t sadr;
-		bool tag_end {};
+		bool tag_end;
 	};
 	Channel channels[10] {};
 
 	void write(uint32_t addr, uint32_t value);
 	uint32_t read(uint32_t addr);
+
+	void clock_sif();
 };

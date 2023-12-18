@@ -123,6 +123,7 @@ struct EeCpu {
 	void raise_level1_exception(uint32_t vector, uint8_t cause);
 	void raise_level2_exception(uint32_t vector, uint8_t cause);
 	void raise_int0(uint8_t irq);
+	void raise_int1();
 
 	void inst_cop0(uint32_t byte);
 	void inst_special(uint32_t byte);

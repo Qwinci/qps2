@@ -3,6 +3,10 @@
 #include <iostream>
 #include <cassert>
 
+#define D_STR (1U << 24)
+#define D_MODE(chcr) ((chcr) >> 9 & 0b11)
+#define D_INC(chcr) ((chcr) >> 1 & 1)
+
 void IopDma::write(uint32_t addr, uint32_t value) {
 	uint32_t base = addr & 0xFFFFFFF0;
 	Channel* channel;
@@ -60,10 +64,19 @@ void IopDma::write(uint32_t addr, uint32_t value) {
 	}
 	else if (reg == 8) {
 		channel->chcr = value;
-		if (!(value & 1U << 24) && !(value & 1U << 28)) {
+		if (!(value & D_STR) && !(value & 1U << 28)) {
 			return;
 		}
-		channel->chcr |= 1U << 24;
+		channel->chcr |= D_STR;
+		auto block_size = channel->bcr & 0xFFFF;
+		auto block_count = channel->bcr >> 16;
+		if (block_size == 0) {
+			block_size = 0x10000;
+		}
+		if (block_count == 0) {
+			block_count = 0x10000;
+		}
+		channel->words_to_transfer = block_count * block_size;
 
 		uint8_t mode = value >> 9 & 0b11;
 		// SIF0 to EE
@@ -80,5 +93,40 @@ void IopDma::write(uint32_t addr, uint32_t value) {
 	}
 	else if (reg == 0xC) {
 		channel->tadr = value;
+	}
+	else {
+		assert(false);
+	}
+}
+
+void IopDma::clock_sif() {
+	if (!dmacen) {
+		return;
+	}
+
+	auto& sif0 = channels[9];
+	// IOP->EE
+	if (sif0.chcr & D_STR) {
+		auto mode = D_MODE(sif0.chcr);
+		assert(false);
+	}
+
+	// EE->IOP
+	auto& sif1 = channels[10];
+	if (sif1.chcr & D_STR) {
+		auto mode = D_MODE(sif1.chcr);
+		assert(mode == 1);
+
+		int inc = D_INC(sif1.chcr) ? -4 : 4;
+		if (bus.sif.sif1_fifo_size && sif1.words_to_transfer >= 2) {
+			auto& iop_bus = bus.iop_cpu.iop_bus;
+			auto value = bus.sif.sif1_fifo[bus.sif.sif1_fifo_iop_ptr];
+			bus.sif.sif1_fifo_iop_ptr = (bus.sif.sif1_fifo_iop_ptr + 1) % 16;
+			bus.sif.sif1_fifo_size -= 1;
+			iop_bus.write32(sif1.madr, value);
+			iop_bus.write32(sif1.madr + 4, value >> 32);
+			sif1.madr += inc * 2;
+			sif1.words_to_transfer -= 2;
+		}
 	}
 }

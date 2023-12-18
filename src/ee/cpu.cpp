@@ -205,3 +205,14 @@ void EeCpu::raise_int0(uint8_t irq) {
 
 	raise_level1_exception(0x80000200, 0);
 }
+
+void EeCpu::raise_int1() {
+	auto status = co0.get_reg(Cop0Reg::Status);
+	if (!(status & 1U << 11)) {
+		// DMAC interrupt pending
+		co0.get_reg(Cop0Reg::Cause) |= 1U << 11;
+		return;
+	}
+
+	raise_level1_exception(0x80000200, 0);
+}

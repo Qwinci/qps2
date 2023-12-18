@@ -157,6 +157,11 @@ uint32_t Bus::read32(uint32_t addr) {
 	else if (addr == 0x12001000) {
 		return gs.csr;
 	}
+	// reserved
+	else if ((addr >= 0x10002040 && addr <= 0x10002FF0) ||
+		(addr >= 0x1000E070 && addr <= 0x1000EFF0)) {
+		return 0;
+	}
 
 	return read16(addr) | read16(addr + 2) << 16;
 }
@@ -343,6 +348,7 @@ void Bus::write32(uint32_t addr, uint32_t value) {
 	}
 	// DMAC D_STAT
 	else if (addr == 0x1000E010) {
+		value ^= 0x3FF03FF;
 		dmac.stat = value;
 	}
 	// DMAC D_PCR

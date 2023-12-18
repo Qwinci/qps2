@@ -63,7 +63,7 @@ void IopCpu::raise_level1_exception(uint32_t vector, uint8_t cause) {
 	if (co0.get_reg(IopCop0Reg::Sr) & 1 << 22) {
 		if (vector != 0xBFC00000) {
 			vector &= 0xFFF;
-			vector |= 0xBFC00200;
+			vector |= 0xBFC00100;
 		}
 	}
 
